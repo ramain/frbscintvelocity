@@ -54,7 +54,7 @@ def plot_dynamic_spectra(specs, onfreqs, ts, freq, corrmin=200, aspect=(6,8)):
 
     plt.xlabel('frequency (MHz)', fontsize=16)
     plt.ylabel('time (min)', fontsize=16)
-    plt.xlim(min(freqs.value), max(freqs.value))
+    plt.xlim(min(freq.value), max(freq.value))
     plt.ylim(min(ts)/60., max(ts)/60.)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
@@ -62,7 +62,7 @@ def plot_dynamic_spectra(specs, onfreqs, ts, freq, corrmin=200, aspect=(6,8)):
 
 
 
-def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freqs):
+def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
     """
     Correlate all pairs of spectra.
 
@@ -76,7 +76,7 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freqs):
         Array of burst times.
     onfreqs : numpy.ndarray
         Array of frequency channels above noise threshold.
-    freqs : astropy.units.quantity.Quantity
+    freq : astropy.units.quantity.Quantity
         Array of frequency channels.
 
     Returns:
@@ -107,12 +107,13 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freqs):
     corrs2D = []
 
     # restrict frequency range
-    ilim = np.argwhere( (freqs.value>1200) & (freqs.value<1500)).squeeze()
+    ilim = np.argwhere( (freq.value>1200) & (freq.value<1500)).squeeze()
 
     # minimum number of overlapping frequencies (change to fraction of total)
     compute_err = 1
     Niter = 100
     errs = []
+    corrmin = len(ilim)//4
 
     # perform correlation, loop over pairs, compute errors
     for k in range(pairs.shape[0]):
@@ -188,7 +189,6 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freqs):
     print("scintillation timescale: {0:.2f} +/- {1:.2f} min".format(ts, terr))
 
     if plot:
-
         plt.figure(figsize=(10,6))
         plt.errorbar(abs(dtcorrs)/60., corrs, yerr=errs, marker='o', markersize=3, 
                     linestyle='None', alpha=0.2, color='k')
@@ -196,7 +196,7 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freqs):
         plt.xlabel("time (min)", fontsize=14)
         plt.ylabel("correlation (arb)", fontsize=14)
 
-        plt.plot(dtplot, gaussfit(dtplot, pEff[0], pEff[1]), linestyle='dotted', color='tab:red')
+        plt.plot(dtplot, gaussfit(dtplot, p[0], p[1]), linestyle='dotted', color='tab:red')
         plt.xlim(-5,30)
         plt.ylim(-0.5, 1.5)
         plt.show()
@@ -269,7 +269,7 @@ def bin_ACF(corrs, corrs2D, errs, dtcorrs, ntbin=100, tbin=0.25):
     pbin, pbincov = curve_fit(gaussfit, dt_regular, corr_regular, p0=p0)
     prefactor = np.sqrt(2*np.log(2))
     tsbin = prefactor * pbin[0]
-    terrbin = prefactor * np.sqrt(pbincov2[0][0])
+    terrbin = prefactor * np.sqrt(pbincov[0][0])
 
     return corrs2D_regular, dt_regular, corr_regular, errs_regular, tsbin, terrbin
 
@@ -343,20 +343,10 @@ def plot_secondary_spectrum(corrs2D_regular, freq, tbin, mask=True):
     plt.xlim(-8, 8)
 
     plt.show()
+    return S, maxft, maxtau, C0, dfbin, ndf, tbin
 
 
-def plot_2d_acf(C0, ntbin, ndf, dfbin, corrs, errs, dtcorrs, pEff2):
-    def expfit(t, tau, A):
-        return A*np.exp(-t/tau)
-
-    def gaussfit(t, sigma, A):
-        return A*np.exp(-t**2/(2*sigma**2))
-
-    def lorentzian(x, gam, a):
-        return a / (1 + (x/gam)**2)
-
-    def gaussfitC(t, sigma, A):
-        return A*np.exp(-t**2/(2*sigma**2))
+def plot_2d_acf(C0, ntbin, tbin, ndf, dfbin, corrs, errs, dtcorrs):
 
     slices = 0
     tlim = 20.
@@ -381,7 +371,7 @@ def plot_2d_acf(C0, ntbin, ndf, dfbin, corrs, errs, dtcorrs, pEff2):
         CT = C0[:,midf]
         CF = C0[midt]
 
-    fig = plt.figure(figsize=(8,8))
+    plt.figure(figsize=(8,8))
     plt.subplots_adjust(hspace=0.05, wspace=0.05)
     ax = plt.subplot2grid((4, 4), (1, 0), colspan=3, rowspan=3)
     axt = plt.subplot2grid((4, 4), (0, 0), colspan=3)
@@ -404,8 +394,8 @@ def plot_2d_acf(C0, ntbin, ndf, dfbin, corrs, errs, dtcorrs, pEff2):
 
     axf.set_ylim(-flim,flim)
     axt.set_xlim(-tlim,tlim)
-    axt.plot(taxis, gaussfitC(taxis, *pEff2), linestyle='--', color='tab:orange')
-    axf.plot(expfit(faxis, fscint, 1), faxis, linestyle='--', color='tab:orange')
+    #axt.plot(taxis, gaussfitC(taxis, *popt), linestyle='--', color='tab:orange')
+    #axf.plot(expfit(faxis, fscint, 1), faxis, linestyle='--', color='tab:orange')
     axt.set_xticks([])
     axf.set_yticks([])
     axt.set_ylabel(r'$R(\Delta t, \Delta \nu=0)$', fontsize=16)
@@ -416,11 +406,11 @@ def plot_2d_acf(C0, ntbin, ndf, dfbin, corrs, errs, dtcorrs, pEff2):
 
 def main():
     parser = argparse.ArgumentParser(description='Description of your program')
-    parser.add_argument('-i','--input', help='Input file path', required=True)
+    parser.add_argument('-s','--spectra', help='Input file path, npz file containing spectra', required=True)
     args = vars(parser.parse_args())
 
     # Load data
-    fn = args.spectra
+    fn = args['spectra']
     d = np.load(fn, allow_pickle=True, encoding='latin1')
 
     specs = d['spectra']
@@ -432,8 +422,10 @@ def main():
     plot_dynamic_spectra(specs, onfreqs, ts, freq)
     corrs, errs, dtcorrs, corrs2D = correlate_spectra_pairs(specs, specsNoise, ts, onfreqs, freq)
     corrs2D_regular, dt_regular, corr_regular, errs_regular, tsbin, terrbin = bin_ACF(corrs, corrs2D, errs, dtcorrs)
-    plot_2d_acf(corrs2D_regular, ntbin, ndf, dfbin, corrs, errs, dtcorrs, pEff2)
-    plot_secondary_spectrum(corrs2D_regular, freq, tbin, mask=True)
+    tbin = dt_regular[1] - dt_regular[0]
+    S, maxft, maxtau, C0, dfbin, ndf, tbin = plot_secondary_spectrum(corrs2D_regular, freq, tbin, mask=True)
+    ntbin = corrs2D_regular.shape[0]//2
+    plot_2d_acf(C0, ntbin, tbin, ndf, dfbin, corrs, errs, dtcorrs)
 
 if __name__ == '__main__':
     main()

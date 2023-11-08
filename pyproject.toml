@@ -2,7 +2,7 @@
 name = "frbscintvelocity"
 version = "0.1.0"
 description = "Scintillation arc and ACF analysis of irregularly spaced bursts"
-authors = ["Robert Main <ramain@mpifr-bonn.mpg.de>"]
+authors = ["Robert Main <robert.main@mcgill.ca>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -10,7 +10,7 @@ python = ">=3.8,<3.12"
 astropy = "~5.2"
 numpy = "^1.24.3"
 scipy = "^1.10.1"
-
+matplotlib = "^3.7.1"
 
 [build-system]
 requires = ["poetry-core"]

@@ -18,7 +18,7 @@ def lorentzian( x, gam, a ):
 
 
 
-def plot_dynamic_spectra(specs, onfreqs, ts, freq, corrmin=200, aspect=(6,8)):
+def plot_dynamic_spectra(specs, onfreqs, ts, freq, aspect=(6,8)):
     """
     Plots the dynamic spectra given the input data.
 
@@ -49,8 +49,7 @@ def plot_dynamic_spectra(specs, onfreqs, ts, freq, corrmin=200, aspect=(6,8)):
         ti = ts[i]
         specplot = spec1[gi]
         specplot = 0.15 * specplot / np.std(specplot)
-        if len(specplot) > corrmin:
-            plt.plot(freq[gi], specplot + ti / 60., color='k', alpha=0.2)
+        plt.plot(freq[gi], specplot + ti / 60., color='k', alpha=0.2)
 
     plt.xlabel('frequency (MHz)', fontsize=16)
     plt.ylabel('time (min)', fontsize=16)
@@ -107,7 +106,7 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
     corrs2D = []
 
     # restrict frequency range
-    ilim = np.argwhere( (freq.value>1200) & (freq.value<1500)).squeeze()
+    ilim = np.argwhere( (freq.value>1270) & (freq.value<1500)).squeeze()
 
     # minimum number of overlapping frequencies (change to fraction of total)
     compute_err = 1
@@ -197,8 +196,8 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
         plt.ylabel("correlation (arb)", fontsize=14)
 
         plt.plot(dtplot, gaussfit(dtplot, p[0], p[1]), linestyle='dotted', color='tab:red')
-        plt.xlim(-5,30)
-        plt.ylim(-0.5, 1.5)
+        #plt.xlim(-5,30)
+        #plt.ylim(-0.5, 1.5)
         plt.show()
 
     return corrs, errs, dtcorrs, corrs2D
@@ -318,9 +317,9 @@ def plot_secondary_spectrum(corrs2D_regular, freq, tbin, mask=True):
     S = np.abs(S)#**2.0
     S = np.fft.fftshift(S)
 
-    bintau = 12
-    Sbin = S.reshape(S.shape[0], S.shape[1]//bintau, bintau).mean(-1)
-    Splot = np.log10(Sbin)
+    #bintau = 12
+    #Sbin = S.reshape(S.shape[0], S.shape[1]//bintau, bintau).mean(-1)
+    Splot = np.log10(S)
     Splot = Splot - np.median(Splot, axis=0)
 
     vmax = np.max(Splot)

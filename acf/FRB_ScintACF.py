@@ -54,14 +54,14 @@ def plot_dynamic_spectra(specs, onfreqs, ts, freq, aspect=(6,8)):
     plt.xlabel('frequency (MHz)', fontsize=16)
     plt.ylabel('time (min)', fontsize=16)
     plt.xlim(min(freq.value), max(freq.value))
-    plt.ylim(min(ts)/60., max(ts)/60.)
+    plt.ylim(min(ts)/60. - max(specplot) , max(ts)/60. +max(specplot))
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     plt.show()
 
 
 
-def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
+def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1, Niter=100):
     """
     Correlate all pairs of spectra.
 
@@ -99,7 +99,8 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
             tj = ts[j]
             dts[i,j] = tj-ti
 
-    pairs = np.argwhere((abs(dts)<30000.) & (abs(dts)>0.1))
+    # remove pairs with small time difference
+    pairs = np.argwhere(abs(dts)>0.1)
 
     corrs = []
     dtcorrs = []
@@ -109,8 +110,6 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
     ilim = np.argwhere( (freq.value>1270) & (freq.value<1500)).squeeze()
 
     # minimum number of overlapping frequencies (change to fraction of total)
-    compute_err = 1
-    Niter = 100
     errs = []
     corrmin = len(ilim)//4
 
@@ -133,18 +132,19 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
             N2 = specNoise[j][of]  
             dt = dts[i,j]
 
-            if compute_err:
-                csims = np.zeros(Niter)
-                for ii in range(Niter):
-                    spec1sim = spec1 + np.random.normal(size=len(spec1), scale=np.std(N1))
-                    spec2sim = spec2 + np.random.normal(size=len(spec2), scale=np.std(N2))
-                    std1 = np.sqrt(np.std(spec1)**2.0 - np.std(N1)**2.0)
-                    std2 = np.sqrt(np.std(spec2)**2.0 - np.std(N2)**2.0)
-                    c = np.mean((spec1sim-np.mean(spec1sim))*(spec2sim-np.mean(spec2sim))) / (std1*std2)
-                    csims[ii] = c
-                err = np.std(csims)
-                errs.append(err)
+            # Loop over Niter noise iterations to estimate errors
+            csims = np.zeros(Niter)
+            for ii in range(Niter):
+                spec1sim = spec1 + np.random.normal(size=len(spec1), scale=np.std(N1))
+                spec2sim = spec2 + np.random.normal(size=len(spec2), scale=np.std(N2))
+                std1 = np.sqrt(np.std(spec1)**2.0 - np.std(N1)**2.0)
+                std2 = np.sqrt(np.std(spec2)**2.0 - np.std(N2)**2.0)
+                c = np.mean((spec1sim-np.mean(spec1sim))*(spec2sim-np.mean(spec2sim))) / (std1*std2)
+                csims[ii] = c
+            err = np.std(csims)
+            errs.append(err)
 
+            # Correlation, corrected for noise bias
             std1 = np.sqrt(np.std(spec1)**2.0 - np.std(N1)**2.0)
             std2 = np.sqrt(np.std(spec2)**2.0 - np.std(N2)**2.0)
             c = np.mean((spec1-np.mean(spec1))*(spec2-np.mean(spec2))) / (std1*std2)
@@ -163,8 +163,6 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
             ccorr = ccorr / (std1*std2) / (norm)
             ccorr = np.fft.fftshift(ccorr)
             corrs2D.append(ccorr)
-        else:
-            print("{0}, {1} don't overlap in frequency".format(i,j))
     
     dtplot = np.linspace(0,max(dtcorrs)/60.,1000)
         
@@ -179,8 +177,7 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
     yfit = corrs
     yerr = errs
 
-    # need to generalize the starting fit
-    p0 = [ 5., 0.9]
+    p0 = [np.mean(xfit), 1]
     p, pcov = curve_fit(gaussfit, xfit, yfit, sigma=yerr, p0=p0)
     prefactor = np.sqrt(2*np.log(2))
     ts = prefactor * p[0]
@@ -196,7 +193,7 @@ def correlate_spectra_pairs(specs, specNoise, ts, onfreqs, freq, plot=1):
         plt.ylabel("correlation (arb)", fontsize=14)
 
         plt.plot(dtplot, gaussfit(dtplot, p[0], p[1]), linestyle='dotted', color='tab:red')
-        #plt.xlim(-5,30)
+        plt.xlim(-max(dtplot)/8., max(dtplot)*1.1)
         #plt.ylim(-0.5, 1.5)
         plt.show()
 
@@ -264,7 +261,7 @@ def bin_ACF(corrs, corrs2D, errs, dtcorrs, ntbin=100, tbin=0.25):
         corr_regular = np.delete(corr_regular, badindeces)
         errs_regular = np.delete(errs_regular, badindeces)
 
-    p0 = [ 16., 0.8]
+    p0 = [np.mean(dt_regular), 1]
     pbin, pbincov = curve_fit(gaussfit, dt_regular, corr_regular, p0=p0)
     prefactor = np.sqrt(2*np.log(2))
     tsbin = prefactor * pbin[0]
